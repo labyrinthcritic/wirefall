@@ -1,0 +1,10 @@
+[package]
+name = "nftables-sys"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+bindgen = "0.70.1"
+
+[dependencies]
+libc = "0.2.164"
