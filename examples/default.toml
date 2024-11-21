@@ -1,0 +1,12 @@
+# this document represents wirefall's default behavior when the configuration file is empty
+
+# accept any incoming packets on the loopback device
+allow-loopback = true
+# accept any incoming packets marked as "established" or "related" by conntrack
+allow-established = true
+
+[default]
+# give the input chain the "accept" policy
+allow-incoming = true
+# give the output chain the "accept" policy
+allow-outgoing = true

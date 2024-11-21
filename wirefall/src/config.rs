@@ -3,8 +3,13 @@ use std::net::Ipv4Addr;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Config {
+    #[serde(default = "yes")]
+    pub allow_loopback: bool,
+    #[serde(default = "yes")]
+    pub allow_established: bool,
+
     #[serde(default)]
     pub default: DefaultBehavior,
     #[serde(default)]
@@ -73,4 +78,8 @@ impl<T> From<OneOrMany<T>> for Vec<T> {
             OneOrMany::Many(vec) => vec,
         }
     }
+}
+
+fn yes() -> bool {
+    true
 }

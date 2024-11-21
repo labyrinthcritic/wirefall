@@ -9,15 +9,24 @@ pub fn construct_json(config: &Config) -> Value {
         .rules
         .iter()
         .map(|r| rule(r, Direction::Input))
-        .map(|r| json!({ "add": r }))
-        .collect::<Vec<_>>();
+        .map(|r| json!({ "add": r }));
     let outgoing_rules = config
         .outgoing
         .rules
         .iter()
         .map(|r| rule(r, Direction::Output))
-        .map(|r| json!({ "add": r }))
-        .collect::<Vec<_>>();
+        .map(|r| json!({ "add": r }));
+
+    let mut lo = if config.allow_loopback {
+        Some(json!({ "add": allow_loopback() }))
+    } else {
+        None
+    };
+    let mut ct = if config.allow_established {
+        Some(json!({ "add": allow_establish_connections() }))
+    } else {
+        None
+    };
 
     let actions = vec![
         json!({ "flush": { "ruleset": null } }),
@@ -50,6 +59,8 @@ pub fn construct_json(config: &Config) -> Value {
         }),
     ]
     .into_iter()
+    .chain(std::iter::from_fn(move || lo.take()))
+    .chain(std::iter::from_fn(move || ct.take()))
     .chain(incoming_rules)
     .chain(outgoing_rules)
     .collect::<Vec<_>>();
@@ -134,6 +145,61 @@ fn match_equals<T: Serialize>(protocol: &str, field: &str, value: T) -> Value {
                 },
             },
             "right": value,
+        }
+    })
+}
+
+fn allow_loopback() -> Value {
+    json!({
+        "rule": {
+            "family": "inet",
+            "table": "wirefall",
+            "chain": "input",
+            "expr": [
+                {
+                    "match": {
+                        "op": "==",
+                        "left": {
+                            "meta": {
+                                "key": "iifname",
+                            },
+                        },
+                        "right": "lo",
+                    },
+                },
+                {
+                    "accept": null,
+                },
+            ],
+        },
+    })
+}
+
+fn allow_establish_connections() -> Value {
+    json!({
+        "rule": {
+            "family": "inet",
+            "table": "wirefall",
+            "chain": "input",
+            "expr": [
+                {
+                    "match": {
+                        "op": "in",
+                        "left": {
+                            "ct": {
+                                "key": "state",
+                            },
+                        },
+                        "right": [
+                            "established",
+                            "related",
+                        ],
+                    },
+                },
+                {
+                    "accept": null,
+                },
+            ],
         }
     })
 }

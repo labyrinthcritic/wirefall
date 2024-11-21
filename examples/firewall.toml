@@ -1,0 +1,18 @@
+[default]
+allow-incoming = false
+allow-outgoing = true
+
+# SSH
+[[incoming.rule]]
+match = { tcp-port = 22 }
+allow = true
+
+# HTTP
+[[incoming.rule]]
+match = { tcp-port = 80 }
+allow = true
+
+# Block connections to my arch-nemesis
+[[outgoing.rule]]
+match = { ipv4 = "123.123.123.123" }
+allow = false
