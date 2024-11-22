@@ -21,7 +21,9 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct DefaultBehavior {
+    #[serde(default = "yes")]
     pub allow_incoming: bool,
+    #[serde(default = "yes")]
     pub allow_outgoing: bool,
 }
 
@@ -44,7 +46,7 @@ pub struct Chain {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Rule {
-    #[serde(default, rename = "match")]
+    #[serde(rename = "match")]
     pub matches: Matches,
     pub allow: bool,
 }

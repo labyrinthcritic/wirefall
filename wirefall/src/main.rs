@@ -6,69 +6,82 @@ use std::path::PathBuf;
 use colored::Colorize;
 use config::Config;
 
+const DEFAULT_CONFIG_PATH: &str = "/etc/wirefall/wirefall.toml";
+
 fn main() {
     let cli = <Cli as clap::Parser>::parse();
 
+    let mut context = nftables::Context::new()
+        .ok_or("could not create context".to_string())
+        .unwrap();
+
     match cli.command {
-        Command::Apply { config, verbose } => {
-            let config_path = config.unwrap_or(PathBuf::from("/etc/wirefall/default.toml"));
-            let Ok(config_contents) = std::fs::read_to_string(config_path) else {
-                eprintln!(
-                    "{} no configuration was found.",
-                    " error:".bright_red().bold()
-                );
-                eprintln!(
-                    " provide one or write to the default path at /etc/wirefall/default.toml"
-                );
-                return;
-            };
+        Command::Apply { path } => {
+            if let Some(config) = get_config(path) {
+                let actions = nft::actions(&config);
+                let payload = nft::payload(actions);
+                let json = serde_json::to_string(&payload).unwrap();
 
-            match toml::from_str::<Config>(&config_contents) {
-                Ok(config) => {
-                    let value = nft::construct_json(&config);
-                    let json = serde_json::to_string_pretty(&value).unwrap();
-
-                    if verbose {
-                        println!("payload for libnftables-json:");
-                        println!("{json}");
-                    }
-
-                    match run(&json) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            eprintln!("{}", " nftables raised an error:".bright_red().bold(),);
-                            for line in e.trim().split('\n') {
-                                let line = line.trim();
-                                if !line.is_empty() {
-                                    eprintln!("   {line}");
-                                }
-                            }
-                        }
-                    }
+                if let Err(e) = context.run_command(&json, false) {
+                    report_nftables_error(&e);
                 }
-                Err(e) => {
-                    eprintln!(
-                        " {} failed to parse config{}: {:?}",
-                        "error:".bright_red().bold(),
-                        e.span()
-                            .map(|range| format!(" at {range:?}"))
-                            .unwrap_or("".to_string()),
-                        e.message(),
-                    );
-                }
+            }
+        }
+        Command::Inspect { path } => {
+            if let Some(config) = get_config(path) {
+                let actions = nft::actions(&config);
+                let payload = nft::payload(actions);
+                let json = serde_json::to_string_pretty(&payload).unwrap();
+
+                println!("\n{json}\n");
             }
         }
     }
 }
 
-fn run(json: &str) -> Result<(), String> {
-    let mut context = nftables::Context::new().ok_or("could not create context".to_string())?;
-    let output = context.run_command(json)?;
-    let output = output.trim();
-    if !output.is_empty() {
-        println!("output: {output}");
+fn get_config(path: Option<PathBuf>) -> Option<Config> {
+    let config_path = path.unwrap_or(PathBuf::from(DEFAULT_CONFIG_PATH));
+    let Ok(config) = std::fs::read_to_string(config_path) else {
+        eprintln!(
+            "{} no configuration was found.",
+            " error:".bright_red().bold()
+        );
+        eprintln!(
+            " provide one or write to the default path at {}",
+            DEFAULT_CONFIG_PATH
+        );
+        return None;
+    };
+
+    match toml::from_str::<Config>(&config) {
+        Ok(config) => Some(config),
+        Err(e) => {
+            report_parse_error(&e);
+            None
+        }
     }
-    Ok(())
+}
+
+fn report_parse_error(error: &toml::de::Error) {
+    eprintln!(
+        " {} failed to parse config{}: {:?}",
+        "error:".bright_red().bold(),
+        error
+            .span()
+            .map(|range| format!(" at {range:?}"))
+            .unwrap_or("".to_string()),
+        error.message(),
+    );
+}
+
+fn report_nftables_error(error: &str) {
+    eprintln!("{}", " nftables raised an error:".bright_red().bold(),);
+    for line in error.trim().split('\n') {
+        let line = line.trim();
+        if !line.is_empty() {
+            eprintln!("   {line}");
+        }
+    }
 }
 
 #[derive(clap::Parser)]
@@ -79,9 +92,8 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 enum Command {
-    Apply {
-        config: Option<PathBuf>,
-        #[arg(short, long)]
-        verbose: bool,
-    },
+    /// Apply a configuration.
+    Apply { path: Option<PathBuf> },
+    /// Display the ruleset of a configuration.
+    Inspect { path: Option<PathBuf> },
 }

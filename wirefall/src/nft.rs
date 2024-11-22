@@ -3,68 +3,72 @@ use serde_json::{json, Value};
 
 use crate::config::{Config, Matches, Rule};
 
-pub fn construct_json(config: &Config) -> Value {
+pub fn actions(config: &Config) -> Vec<Value> {
     let incoming_rules = config
         .incoming
         .rules
         .iter()
         .map(|r| rule(r, Direction::Input))
-        .map(|r| json!({ "add": r }));
+        .map(|r| json!({ "add": r }))
+        .collect::<Vec<_>>();
     let outgoing_rules = config
         .outgoing
         .rules
         .iter()
         .map(|r| rule(r, Direction::Output))
-        .map(|r| json!({ "add": r }));
+        .map(|r| json!({ "add": r }))
+        .collect::<Vec<_>>();
 
-    let mut lo = if config.allow_loopback {
-        Some(json!({ "add": allow_loopback() }))
+    let lo = if config.allow_loopback {
+        vec![json!({ "add": allow_loopback() })]
     } else {
-        None
+        vec![]
     };
-    let mut ct = if config.allow_established {
-        Some(json!({ "add": allow_establish_connections() }))
+    let ct = if config.allow_established {
+        vec![json!({ "add": allow_establish_connections() })]
     } else {
-        None
+        vec![]
     };
 
-    let actions = vec![
-        json!({ "flush": { "ruleset": null } }),
-        json!({ "add": { "table": { "family": "inet", "name": "wirefall" } } }),
-        json!({
-            "add": {
-                "chain": {
-                    "type": "filter",
-                    "family": "inet",
-                    "table": "wirefall",
-                    "name": "input",
-                    "hook": "input",
-                    "prio": 0,
-                    "policy": policy(config.default.allow_incoming),
-                },
+    let flush_ruleset = json!({ "flush": { "ruleset": null } });
+    let add_table = json!({ "add": { "table": { "family": "inet", "name": "wirefall" } } });
+    let add_input_chain = json!({
+        "add": {
+            "chain": {
+                "type": "filter",
+                "family": "inet",
+                "table": "wirefall",
+                "name": "input",
+                "hook": "input",
+                "prio": 0,
+                "policy": policy(config.default.allow_incoming),
             },
-        }),
-        json!({
-            "add": {
-                "chain": {
-                    "type": "filter",
-                    "family": "inet",
-                    "table": "wirefall",
-                    "name": "output",
-                    "hook": "output",
-                    "prio": 0,
-                    "policy": policy(config.default.allow_outgoing),
-                },
+        },
+    });
+    let add_output_chain = json!({
+        "add": {
+            "chain": {
+                "type": "filter",
+                "family": "inet",
+                "table": "wirefall",
+                "name": "output",
+                "hook": "output",
+                "prio": 0,
+                "policy": policy(config.default.allow_outgoing),
             },
-        }),
-    ]
-    .into_iter()
-    .chain(std::iter::from_fn(move || lo.take()))
-    .chain(std::iter::from_fn(move || ct.take()))
-    .chain(incoming_rules)
-    .chain(outgoing_rules)
-    .collect::<Vec<_>>();
+        },
+    });
 
+    vec![flush_ruleset, add_table, add_input_chain, add_output_chain]
+        .into_iter()
+        .chain(lo.into_iter())
+        .chain(ct.into_iter())
+        .chain(incoming_rules.into_iter())
+        .chain(outgoing_rules.into_iter())
+        .collect::<Vec<_>>()
+}
+
+pub fn payload(actions: Vec<Value>) -> Value {
     json!({ "nftables": actions })
 }
 

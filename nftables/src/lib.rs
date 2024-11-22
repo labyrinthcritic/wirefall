@@ -18,7 +18,6 @@ impl Context {
             unsafe {
                 let out = nft::nft_ctx_buffer_output(context.ptr.as_ptr());
                 let error = nft::nft_ctx_buffer_error(context.ptr.as_ptr());
-                nft::nft_ctx_output_set_flags(context.ptr.as_ptr(), nft::NFT_CTX_OUTPUT_JSON);
 
                 if (out, error) != (0, 0) {
                     panic!(); // TODO
@@ -29,9 +28,13 @@ impl Context {
         context
     }
 
-    pub fn run_command(&mut self, cmd: &str) -> Result<String, String> {
+    pub fn run_command(&mut self, cmd: &str, dry: bool) -> Result<String, String> {
         let buffer = CString::new(cmd).map_err(|_| "Command contained a null byte".to_string())?;
-        let status = unsafe { nft::nft_run_cmd_from_buffer(self.ptr.as_ptr(), buffer.as_ptr()) };
+        let status = unsafe {
+            nft::nft_ctx_set_dry_run(self.ptr.as_ptr(), dry);
+            nft::nft_ctx_input_set_flags(self.ptr.as_ptr(), nft::NFT_CTX_INPUT_JSON);
+            nft::nft_run_cmd_from_buffer(self.ptr.as_ptr(), buffer.as_ptr())
+        };
 
         match status {
             0 => Ok(self.get_output_buffer().unwrap_or("".into())),
