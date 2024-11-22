@@ -9,6 +9,13 @@ use config::Config;
 const DEFAULT_CONFIG_PATH: &str = "/etc/wirefall/wirefall.toml";
 
 fn main() {
+    let success = run();
+    if !success {
+        std::process::exit(1);
+    }
+}
+
+fn run() -> bool {
     let cli = <Cli as clap::Parser>::parse();
 
     let mut context = nftables::Context::new()
@@ -22,8 +29,17 @@ fn main() {
                 let payload = nft::payload(actions);
                 let json = serde_json::to_string(&payload).unwrap();
 
-                if let Err(e) = context.run_command(&json, false) {
-                    report_nftables_error(&e);
+                match context.run_command(&json, false) {
+                    Ok(_) => {
+                        eprintln!(
+                            " {}",
+                            "Applied netfilter configuration.".bright_green().bold()
+                        );
+                        return true;
+                    }
+                    Err(e) => {
+                        report_nftables_error(&e);
+                    }
                 }
             }
         }
@@ -34,9 +50,12 @@ fn main() {
                 let json = serde_json::to_string_pretty(&payload).unwrap();
 
                 println!("\n{json}\n");
+                return true;
             }
         }
     }
+
+    false
 }
 
 fn get_config(path: Option<PathBuf>) -> Option<Config> {
