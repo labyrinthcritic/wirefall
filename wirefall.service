@@ -1,0 +1,12 @@
+[Unit]
+Description=Declarative Firewall Configuration Frontend
+Wants=network-pre.target
+Before=network-pre.target
+ConditionPathExists=/etc/wirefall/wirefall.toml
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/wirefall apply
+
+[Install]
+WantedBy=multi-user.target
