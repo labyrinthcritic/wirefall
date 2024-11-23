@@ -1,4 +1,4 @@
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 use serde::Deserialize;
 
@@ -54,7 +54,8 @@ pub struct Rule {
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Matches {
-    pub ipv4: Option<Ipv4Addr>,
+    pub ip: Option<Ipv4Addr>,
+    pub ipv6: Option<Ipv6Addr>,
 
     pub tcp_port: Option<u16>,
     pub udp_port: Option<u16>,

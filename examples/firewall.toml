@@ -14,5 +14,9 @@ allow = true
 
 # Block connections to my arch-nemesis
 [[outgoing.rule]]
-match = { ipv4 = "123.123.123.123" }
+match = { ip = "123.123.123.123" }
+allow = false
+
+[[outgoing.rule]]
+match = { ipv6 = "1234:1234:1234:1234:1234:1234:1234:1234" }
 allow = false

@@ -19,16 +19,14 @@ pub fn actions(config: &Config) -> Vec<Value> {
         .map(|r| json!({ "add": r }))
         .collect::<Vec<_>>();
 
-    let lo = if config.allow_loopback {
-        vec![json!({ "add": allow_loopback() })]
-    } else {
-        vec![]
-    };
-    let ct = if config.allow_established {
-        vec![json!({ "add": allow_establish_connections() })]
-    } else {
-        vec![]
-    };
+    let mut lo_ct = Vec::new();
+
+    if config.allow_loopback {
+        lo_ct.push(json!({ "add": allow_loopback() }));
+    }
+    if config.allow_established {
+        lo_ct.push(json!({ "add": allow_establish_connections() }));
+    }
 
     let flush_ruleset = json!({ "flush": { "ruleset": null } });
     let add_table = json!({ "add": { "table": { "family": "inet", "name": "wirefall" } } });
@@ -61,8 +59,7 @@ pub fn actions(config: &Config) -> Vec<Value> {
 
     vec![flush_ruleset, add_table, add_input_chain, add_output_chain]
         .into_iter()
-        .chain(lo.into_iter())
-        .chain(ct.into_iter())
+        .chain(lo_ct)
         .chain(incoming_rules.into_iter())
         .chain(outgoing_rules.into_iter())
         .collect::<Vec<_>>()
@@ -105,6 +102,7 @@ fn policy(allow: bool) -> String {
     if allow { "accept" } else { "drop" }.to_string()
 }
 
+/// Construct a rule value.
 fn rule(rule: &Rule, direction: Direction) -> Value {
     let exprs = exprs(&rule.matches, direction, rule.allow);
 
@@ -118,10 +116,14 @@ fn rule(rule: &Rule, direction: Direction) -> Value {
     })
 }
 
+/// Construct the `exprs` value for a rule.
 fn exprs(matches: &Matches, direction: Direction, allow: bool) -> Vec<Value> {
     let ipv4 = matches
-        .ipv4
+        .ip
         .map(|addr| match_equals("ip", direction.addr(), addr));
+    let ipv6 = matches
+        .ipv6
+        .map(|addr| match_equals("ip6", direction.addr(), addr));
     let tcp_port = matches
         .tcp_port
         .map(|port| match_equals("tcp", direction.port(), port));
@@ -131,7 +133,7 @@ fn exprs(matches: &Matches, direction: Direction, allow: bool) -> Vec<Value> {
 
     let action = json!({ policy(allow): null });
 
-    [ipv4, tcp_port, udp_port]
+    [ipv4, ipv6, tcp_port, udp_port]
         .into_iter()
         .flatten()
         .chain(std::iter::once(action))
