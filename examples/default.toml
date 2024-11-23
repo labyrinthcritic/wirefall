@@ -4,6 +4,8 @@
 allow-loopback = true
 # accept any incoming packets marked as "established" or "related" by conntrack
 allow-established = true
+# log any dropped packets
+log = true
 
 [default]
 # give the input chain the "accept" policy

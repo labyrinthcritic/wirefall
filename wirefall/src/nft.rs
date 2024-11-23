@@ -3,19 +3,21 @@ use serde_json::{json, Value};
 
 use crate::config::{Config, Matches, Rule};
 
+const LOG_PREFIX: &str = "[wirefall] denied: ";
+
 pub fn actions(config: &Config) -> Vec<Value> {
     let incoming_rules = config
         .incoming
         .rules
         .iter()
-        .map(|r| rule(r, Direction::Input))
+        .map(|r| rule(r, Direction::Input, config.log))
         .map(|r| json!({ "add": r }))
         .collect::<Vec<_>>();
     let outgoing_rules = config
         .outgoing
         .rules
         .iter()
-        .map(|r| rule(r, Direction::Output))
+        .map(|r| rule(r, Direction::Output, config.log))
         .map(|r| json!({ "add": r }))
         .collect::<Vec<_>>();
 
@@ -57,11 +59,40 @@ pub fn actions(config: &Config) -> Vec<Value> {
         },
     });
 
+    let logs = if config.log {
+        [
+            ("input", config.default.allow_incoming),
+            ("output", config.default.allow_outgoing),
+        ]
+        .into_iter()
+        .filter_map(|(chain, allow)| {
+            let add = json!({
+                "add": {
+                    "rule": {
+                        "family": "inet",
+                        "table": "wirefall",
+                        "chain": chain,
+                        "expr": [
+                            {
+                                "log": { "prefix": LOG_PREFIX },
+                            },
+                        ],
+                    },
+                },
+            });
+            Some(add).filter(|_| !allow)
+        })
+        .collect()
+    } else {
+        vec![]
+    };
+
     vec![flush_ruleset, add_table, add_input_chain, add_output_chain]
         .into_iter()
         .chain(lo_ct)
-        .chain(incoming_rules.into_iter())
-        .chain(outgoing_rules.into_iter())
+        .chain(incoming_rules)
+        .chain(outgoing_rules)
+        .chain(logs)
         .collect::<Vec<_>>()
 }
 
@@ -103,8 +134,8 @@ fn policy(allow: bool) -> String {
 }
 
 /// Construct a rule value.
-fn rule(rule: &Rule, direction: Direction) -> Value {
-    let exprs = exprs(&rule.matches, direction, rule.allow);
+fn rule(rule: &Rule, direction: Direction, log: bool) -> Value {
+    let exprs = exprs(&rule.matches, direction, rule.allow, log);
 
     json!({
         "rule": {
@@ -117,7 +148,7 @@ fn rule(rule: &Rule, direction: Direction) -> Value {
 }
 
 /// Construct the `exprs` value for a rule.
-fn exprs(matches: &Matches, direction: Direction, allow: bool) -> Vec<Value> {
+fn exprs(matches: &Matches, direction: Direction, allow: bool, log: bool) -> Vec<Value> {
     let ipv4 = matches
         .ip
         .map(|addr| match_equals("ip", direction.addr(), addr));
@@ -132,10 +163,12 @@ fn exprs(matches: &Matches, direction: Direction, allow: bool) -> Vec<Value> {
         .map(|port| match_equals("udp", direction.port(), port));
 
     let action = json!({ policy(allow): null });
+    let logged = Some(json!({ "log": { "prefix": LOG_PREFIX } })).filter(|_| !allow && log);
 
     [ipv4, ipv6, tcp_port, udp_port]
         .into_iter()
         .flatten()
+        .chain(logged)
         .chain(std::iter::once(action))
         .collect::<Vec<_>>()
 }

@@ -9,6 +9,8 @@ pub struct Config {
     pub allow_loopback: bool,
     #[serde(default = "yes")]
     pub allow_established: bool,
+    #[serde(default = "yes")]
+    pub log: bool,
 
     #[serde(default)]
     pub default: DefaultBehavior,
